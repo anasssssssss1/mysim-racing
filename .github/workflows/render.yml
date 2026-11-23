@@ -3,7 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-concurrency: { group: render-${{ github.ref }}, cancel-in-progress: true }
+concurrency:
+  group: render-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   shots:
     runs-on: ubuntu-24.04
