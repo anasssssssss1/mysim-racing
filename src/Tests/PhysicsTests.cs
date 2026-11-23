@@ -26,6 +26,7 @@ public partial class PhysicsTests : Node3D
         await Run("100-0 km/h braking", Braking);
         await Run("max lateral grip", Lateral);
         await Run("reverse", Reverse);
+        await Run("AI lap of Yas Marina", AiLap);
 
         foreach (var line in _report) GD.Print(line);
         GD.Print(_failed ? "PHYSICS TESTS: FAIL" : "PHYSICS TESTS: PASS");
@@ -134,6 +135,34 @@ public partial class PhysicsTests : Node3D
             if (!spun) maxG = Mathf.Max(maxG, Mathf.Abs(v.Length() * _car.AngularVelocity.Y) / 9.81f);
         });
         Check(maxG > 1.2f && maxG < 2.2f, $"max lateral acceleration at ~108 km/h {maxG:F2} g (1.2-2.2)");
+    }
+
+    async Task AiLap()
+    {
+        var track = new TrackBuilder();
+        AddChild(track);
+        _car.Place(track.PoseAt(-6, 0.4f));
+        var ai = new AiDriver { Car = _car, Track = track };
+        AddChild(ai);
+        var timer = new LapTimer { Car = _car, Track = track };
+        AddChild(timer);
+        await Step(2);
+        timer.Reset();
+        float lap = -1, worstOff = 0, vmax = 0;
+        timer.LapDone += (_, t) => lap = t;
+        int hint = 0;
+        while (lap < 0 && _steps < 240 * 240)
+            await Step(1, () =>
+            {
+                hint = track.Nearest(_car.GlobalPosition, hint, 40);
+                float off = (_car.GlobalPosition - track.Centre[hint]).Dot(track.Left[hint]);
+                worstOff = Mathf.Max(worstOff, Mathf.Abs(off));
+                vmax = Mathf.Max(vmax, _car.ForwardSpeed);
+            });
+        ai.QueueFree(); timer.QueueFree(); track.QueueFree();
+        Check(lap > 0, $"completed a lap: {LapTimer.Fmt(lap)} (top speed {vmax * 3.6f:F0} km/h)");
+        Check(lap > 105 && lap < 160, "lap time in 1:45-2:40");
+        Check(worstOff < track.HalfWidth + 1.2f, $"stayed on the road + kerbs: worst offset {worstOff:F1} m (< {track.HalfWidth + 1.2f:F1})");
     }
 
     async Task Reverse()
