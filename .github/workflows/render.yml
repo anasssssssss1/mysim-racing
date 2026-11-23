@@ -1,0 +1,30 @@
+name: render
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+concurrency: { group: render-${{ github.ref }}, cancel-in-progress: true }
+jobs:
+  shots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GODOT: 4.7.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - name: Install Godot and software Vulkan
+        run: |
+          for i in 1 2 3; do sudo apt-get update -q && sudo apt-get install -yq xvfb mesa-vulkan-drivers libvulkan1 && break; sleep 20; done
+          curl -sSfL -o g.zip https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_mono_linux_x86_64.zip
+          unzip -q g.zip && mv Godot_v${GODOT}-stable_mono_linux_x86_64 godot-bin
+          echo "G=$PWD/godot-bin/Godot_v${GODOT}-stable_mono_linux.x86_64" >> $GITHUB_ENV
+      - name: Build C#
+        run: dotnet build -warnaserror
+      - name: Import
+        run: $G --headless --path . --import || true
+      - name: Render shots
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" $G --path . --rendering-driver vulkan --resolution 1920x1080 -- --shots=$PWD/shots
+      - uses: actions/upload-artifact@v4
+        with: { name: shots, path: shots/ }
