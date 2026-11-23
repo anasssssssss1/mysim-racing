@@ -274,7 +274,7 @@ public partial class TrackDressing : Node3D
                 Box(structure, L(0, h / 2, r * stepD + stepD / 2), new Vector3(len, h, stepD));
                 Box(seats, L(0, h + 0.2f, r * stepD + stepD * 0.75f), new Vector3(len, 0.4f, 0.12f));
                 for (float x = -len / 2 + 0.4f; x < len / 2 - 0.3f; x += 0.55f)
-                    if (_rng.Randf() < 0.78f)
+                    if (_rng.Randf() < 0.78f * Settings.Density)
                         _crowd.Add((L(x, h + 0.36f, r * stepD + stepD * 0.45f).RotatedLocal(Vector3.Up, _rng.RandfRange(-0.25f, 0.25f)), shirts[_rng.RandiRange(0, shirts.Length - 1)]));
             }
             Box(structure, L(0, (top + 3) / 2, rows * stepD + 0.2f), new Vector3(len, top + 3, 0.4f));
@@ -423,7 +423,7 @@ public partial class TrackDressing : Node3D
     {
         var b = Track.Bounds().Grow(650);
         Color[] facades = { new(0.85f, 0.8f, 0.7f), new(0.75f, 0.76f, 0.78f), new(0.42f, 0.45f, 0.5f), new(0.92f, 0.9f, 0.86f), new(0.6f, 0.52f, 0.42f), new(0.2f, 0.25f, 0.3f), new(0.78f, 0.7f, 0.6f) };
-        for (int tries = 0; tries < 4000 && _city.Count < 420; tries++)
+        for (int tries = 0; tries < 4000 && _city.Count < 420 * Settings.Density; tries++)
         {
             var p = new Vector3(_rng.RandfRange(b.Position.X, b.End.X), 0, _rng.RandfRange(b.Position.Z, b.End.Z));
             float d = Track.DistToTrack(p);
@@ -441,7 +441,7 @@ public partial class TrackDressing : Node3D
     void Palms()
     {
         var b = Track.Bounds().Grow(220);
-        for (int tries = 0; tries < 6000 && _trunks.Count < 450; tries++)
+        for (int tries = 0; tries < 6000 && _trunks.Count < 450 * Settings.Density; tries++)
         {
             var p = new Vector3(_rng.RandfRange(b.Position.X, b.End.X), 0, _rng.RandfRange(b.Position.Z, b.End.Z));
             float d = Track.DistToTrack(p);

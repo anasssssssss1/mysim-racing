@@ -44,6 +44,11 @@ public partial class Menu : CanvasLayer
         box.AddChild(_players);
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(480, 0) };
         box.AddChild(_status);
+        var q = new OptionButton();
+        foreach (var name in System.Enum.GetNames(typeof(Settings.Quality))) q.AddItem($"Graphics: {name}");
+        q.Selected = (int)Settings.Current;
+        q.ItemSelected += i => { Settings.Apply((Settings.Quality)(int)i, GetViewport(), Main.WorldEnv, Main.Sun); Settings.Save(); };
+        box.AddChild(q);
         box.AddChild(Btn("Quit", () => GetTree().Quit()));
 
         Net.Status += s => _status.Text = s;

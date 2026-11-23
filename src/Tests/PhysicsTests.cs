@@ -26,6 +26,7 @@ public partial class PhysicsTests : Node3D
         await Run("100-0 km/h braking", Braking);
         await Run("max lateral grip", Lateral);
         await Run("reverse", Reverse);
+        await Run("power out of a bend at 100 km/h", PowerExit);
         await Run("AI lap of Yas Marina", AiLap);
 
         foreach (var line in _report) GD.Print(line);
@@ -167,6 +168,29 @@ public partial class PhysicsTests : Node3D
         Check(lap > 0, $"completed a lap: {LapTimer.Fmt(lap)} (top speed {vmax * 3.6f:F0} km/h)");
         Check(lap > 105 && lap < 160, "lap time in 1:45-2:40");
         Check(worstOff < track.HalfWidth + 1.2f, $"stayed on the road + kerbs: worst offset {worstOff:F1} m (< {track.HalfWidth + 1.2f:F1})");
+    }
+
+    async Task PowerExit()
+    {
+        await Step(240);
+        while (Speed < 100 / 3.6f) await Step(1, () => _car.In = new CarInput { Throttle = 1 });
+        float maxBeta = 0;
+        int t0 = _steps;
+        await Step(240 * 3, () =>
+        {
+            float t = (_steps - t0) * Dt;
+            _car.In = new CarInput { Throttle = 1, Steer = Mathf.Min(0.2f, t * 0.4f) };
+            var v = _car.LinearVelocity;
+            float beta = Mathf.RadToDeg(Mathf.Atan2(v.Dot(_car.GlobalBasis.X), Mathf.Max(0.5f, Speed)));
+            maxBeta = Mathf.Max(maxBeta, Mathf.Abs(beta));
+            if ((_steps - t0) % 24 == 0)
+            {
+                string w = string.Join(" | ", System.Linq.Enumerable.Select(_car.Wheels, x =>
+                    $"Fz {x.Load:F0} k {x.Kappa:F3} a {Mathf.RadToDeg(x.Alpha):F1} Fx {x.Fx:F0} Fy {x.Fy:F0}"));
+                _report.Add($"  t {t:F1} v {Speed * 3.6f:F0} beta {beta:F1} yaw {_car.AngularVelocity.Y:F2} g{_car.Gear} tc {_car.Tc:F2} :: {w}");
+            }
+        });
+        Check(maxBeta < 6, $"max sideslip with full throttle and 0.2 steer {maxBeta:F1} deg (< 6)");
     }
 
     async Task Reverse()

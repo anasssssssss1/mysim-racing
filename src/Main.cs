@@ -7,6 +7,8 @@ using System.Linq;
 ///   --shots=<dir>   save preview renders and quit
 public partial class Main : Node3D
 {
+    public static Environment WorldEnv;
+    public static DirectionalLight3D Sun;
     TrackBuilder _track;
     ChaseCamera _cam;
     Race _race;
@@ -16,10 +18,14 @@ public partial class Main : Node3D
     {
         var args = OS.GetCmdlineUserArgs();
         if (args.Contains("--test")) { AddChild(new PhysicsTests()); return; }
+        var netTest = args.FirstOrDefault(a => a.StartsWith("--net-test="));
+        if (netTest != null) { await NetTest(netTest["--net-test=".Length..]); return; }
 
         PlayerController.SetupActions();
-        AddChild(new WorldEnvironment { Environment = Env() });
-        AddChild(new DirectionalLight3D
+        Settings.Load();
+        var env = Env();
+        AddChild(new WorldEnvironment { Environment = env });
+        AddChild(Sun = new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-38, -35, 0),
             LightEnergy = 1.8f,
@@ -27,6 +33,8 @@ public partial class Main : Node3D
             DirectionalShadowMaxDistance = 400,
         });
 
+        WorldEnv = env;
+        Settings.Apply(args.Any(a => a.StartsWith("--shots=")) ? Settings.Quality.Ultra : Settings.Current, GetViewport(), env, Sun);
         _track = new TrackBuilder { Name = "Track" };
         AddChild(_track);
         _cam = new ChaseCamera();
@@ -113,6 +121,48 @@ public partial class Main : Node3D
             GD.Print($"shot {name}");
         }
         GetTree().Quit();
+    }
+
+    /// Two instances on one machine: host and client race with the AI; each checks it sees the other car move.
+    async System.Threading.Tasks.Task NetTest(string role)
+    {
+        _track = new TrackBuilder { Name = "Track", Dress = false };
+        AddChild(_track);
+        _cam = new ChaseCamera();
+        AddChild(_cam);
+        var hud = new Hud();
+        AddChild(hud);
+        _race = new Race { Name = "Race", Track = _track, Cam = _cam, Hud = hud, Ai = true, Laps = 2 };
+        AddChild(_race);
+        var net = new NetSession { Name = "Net" };
+        AddChild(net);
+        net.Status += s => GD.Print($"[{role}] {s}");
+        bool started = false;
+        _race.Started += () => started = true;
+        if (role == "host")
+        {
+            net.Host();
+            bool joined = false;
+            net.PlayerJoined += _ => joined = true;
+            for (int i = 0; i < 240 * 60 && !joined; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree().CreateTimer(1), Timer.SignalName.Timeout);
+            _race.HostStart();
+        }
+        else net.Join("127.0.0.1");
+        for (int i = 0; i < 240 * 60 && !started; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        if (!started) { GD.Print($"NET TEST {role}: FAIL (race never started)"); GetTree().Quit(1); return; }
+        var cars = _race.GetNode("Cars");
+        Car other = null;
+        foreach (var c in cars.GetChildren()) if (c is Car car && car != _race.Local) other = car;
+        if (other == null) { GD.Print($"NET TEST {role}: FAIL (no remote car)"); GetTree().Quit(1); return; }
+        await ToSignal(GetTree().CreateTimer(1), Timer.SignalName.Timeout);
+        var p0 = other.GlobalPosition;
+        await ToSignal(GetTree().CreateTimer(25), Timer.SignalName.Timeout);
+        float moved = p0.DistanceTo(other.GlobalPosition), mine = _race.Local.GlobalPosition.DistanceTo(_track.PoseAt(0).Origin);
+        bool ok = moved > 100;
+        GD.Print($"NET TEST {role}: {(ok ? "PASS" : "FAIL")} remote car moved {moved:F0} m in 25 s (> 100); own car {mine:F0} m from start");
+        net.Leave();
+        GetTree().Quit(ok ? 0 : 1);
     }
 
     Vector3 P(int i, float left, float up)

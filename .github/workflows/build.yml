@@ -18,6 +18,22 @@ jobs:
       - name: Physics tests
         run: $G --headless --path . --fixed-fps 240 -- --test
 
+  net:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Host and client on one machine
+        run: |
+          $G --headless --path . -- --net-test=host > host.log 2>&1 &
+          HOST=$!
+          sleep 8
+          $G --headless --path . -- --net-test=client > client.log 2>&1; C=$?
+          wait $HOST; H=$?
+          grep -h "NET TEST\|\[host\]\|\[client\]" host.log client.log
+          exit $((C | H))
+
   shots:
     runs-on: ubuntu-24.04
     timeout-minutes: 40

@@ -29,6 +29,7 @@ public partial class Car : RigidBody3D
     public float Rpm;
     public new bool Ready => Wheels != null;
     float _shift, _reverseHold, _tc = 1f;
+    public float Tc => _tc;
     PhysicsRayQueryParameters3D _ray;
     const float G = 9.81f, Rho = 1.2f;
 

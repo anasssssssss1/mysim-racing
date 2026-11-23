@@ -17,6 +17,8 @@ public partial class Race : Node3D
     public string Standings = "";
     public event Action Started;
     public Car Local { get; private set; }
+    public bool Ai;                       // local car driven by the AI (bots, tests, attract mode)
+    AiDriver _ai;
 
     Node3D _cars;
     LapTimer _timer;
@@ -46,6 +48,8 @@ public partial class Race : Node3D
         foreach (var c in _cars.GetChildren()) { _cars.RemoveChild(c); c.QueueFree(); }
         _timer?.QueueFree();
         _pc?.QueueFree();
+        _ai?.QueueFree();
+        _ai = null; _pc = null;
         Laps = laps;
         _table.Clear();
         long me = Multiplayer.GetUniqueId();
@@ -68,8 +72,7 @@ public partial class Race : Node3D
         if (!local) { car.FreezeMode = RigidBody3D.FreezeModeEnum.Kinematic; car.Freeze = true; return; }
 
         Local = car;
-        _pc = new PlayerController { Car = car };
-        AddChild(_pc);
+        if (!Ai) { _pc = new PlayerController { Car = car }; AddChild(_pc); }
         _timer = new LapTimer { Car = car, Track = Track, Name = "LapTimer" };
         _timer.LapDone += OnLap;
         AddChild(_timer);
@@ -87,6 +90,7 @@ public partial class Race : Node3D
             Countdown -= (float)delta;
             if (Countdown <= 0) { State = Phase.Racing; if (_timer != null) _timer.Reset(); }
         }
+        if (Ai && _ai == null && Local != null && State == Phase.Racing) { _ai = new AiDriver { Car = Local, Track = Track }; AddChild(_ai); }
         if (_pc != null) _pc.SetPhysicsProcess(State != Phase.Countdown);
         if (State == Phase.Countdown && Local != null) Local.In = new CarInput { Brake = 1 };
         if (_timer != null) _timer.SetPhysicsProcess(State == Phase.Racing);
