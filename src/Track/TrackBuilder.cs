@@ -1,8 +1,10 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
 /// Builds a drivable circuit from a centreline JSON (tools/osm_track.py output):
-/// road, white edge lines, kerbs on corners, asphalt run-off, and a trimesh collider.
+/// road, edge lines, kerbs, run-off, gravel traps, walls, ground, and colliders that carry a
+/// surface grip value the car reads. Dressing (stands, buildings, signs...) is in TrackDressing.
 public partial class TrackBuilder : Node3D
 {
     [Export] public string TrackFile = "res://data/yas_marina.json";
@@ -10,11 +12,22 @@ public partial class TrackBuilder : Node3D
     [Export] public float KerbWidth = 1.2f;
     [Export] public float RunoffWidth = 12f;
     [Export] public float KerbRadius = 220f;   // corners tighter than this get kerbs
+    [Export] public bool Dress = true;
 
     public Vector3[] Centre;
     public Vector3[] Left;   // unit vector to the driver's left
     public float[] Curv;     // signed 1/m, + = turning left
     public float Length;
+    public float[] Profile;  // planned AI speed, m/s
+    public List<Corner> Corners = new();
+    public float WallOffset => HalfWidth + RunoffWidth + 1f;
+    public bool[] WallLeft, WallRight;
+    public bool[] GravelLeft, GravelRight;
+
+    public struct Corner { public int Start, Apex, End, Dir, Number; public float EntrySpeed, ApexSpeed; }
+
+    Dictionary<Vector2I, List<int>> _grid;
+    const float Cell = 25f;
 
     public override void _Ready() => Build();
 
@@ -47,18 +60,96 @@ public partial class TrackBuilder : Node3D
             for (int k = -W; k <= W; k++) s += raw[(i + k + n) % n];
             Curv[i] = s / (2 * W + 1);
         }
+        _grid = new();
+        for (int i = 0; i < n; i++)
+        {
+            var key = new Vector2I(Mathf.FloorToInt(Centre[i].X / Cell), Mathf.FloorToInt(Centre[i].Z / Cell));
+            if (!_grid.TryGetValue(key, out var list)) _grid[key] = list = new List<int>();
+            list.Add(i);
+        }
+        Profile = AiDriver.SpeedProfile(this, 1.3f, 11f);
+        FindCorners();
+    }
+
+    void FindCorners()
+    {
+        int n = Centre.Length;
+        float k0 = 1f / 260f;
+        // start scanning on a straight so no corner wraps the index origin
+        int origin = 0;
+        for (int i = 0; i < n; i++) if (Mathf.Abs(Curv[i]) < k0 * 0.5f) { origin = i; break; }
+        Corner? cur = null;
+        int gap = 0;
+        for (int s = 0; s <= n; s++)
+        {
+            int i = (origin + s) % n;
+            bool on = Mathf.Abs(Curv[i]) > k0;
+            int dir = Math.Sign(Curv[i]);
+            if (on && cur is { } c && (dir == c.Dir || gap < 4))
+            {
+                if (Mathf.Abs(Curv[i]) > Mathf.Abs(Curv[c.Apex])) c.Apex = i;
+                c.End = i; gap = 0; cur = c;
+            }
+            else if (on)
+            {
+                if (cur is { } done) Corners.Add(done);
+                cur = new Corner { Start = i, Apex = i, End = i, Dir = dir }; gap = 0;
+            }
+            else if (cur != null && ++gap > 12) { Corners.Add(cur.Value); cur = null; }
+        }
+        if (cur != null) Corners.Add(cur.Value);
+        Corners.RemoveAll(c => Span(c.Start, c.End) < 6);
+        // number from the start line, record speeds
+        Corners.Sort((a, b) => a.Start.CompareTo(b.Start));
+        for (int k = 0; k < Corners.Count; k++)
+        {
+            var c = Corners[k];
+            c.Number = k + 1;
+            c.ApexSpeed = Profile[c.Apex];
+            c.EntrySpeed = 0;
+            for (int b = 0; b < 150; b++) c.EntrySpeed = Mathf.Max(c.EntrySpeed, Profile[(c.Start - b + n) % n]);
+            Corners[k] = c;
+        }
+    }
+
+    public int Span(int a, int b) => ((b - a) % Centre.Length + Centre.Length) % Centre.Length;
+    public int Wrap(int i) => ((i % Centre.Length) + Centre.Length) % Centre.Length;
+
+    /// Distance from p to the nearest centreline point (ignoring indices within `skip` of `near`).
+    public float DistToTrack(Vector3 p, int near = -1, int skip = 0)
+    {
+        float best = float.MaxValue;
+        int cx = Mathf.FloorToInt(p.X / Cell), cz = Mathf.FloorToInt(p.Z / Cell);
+        for (int r = 0; r < 12; r++)
+        {
+            for (int dx = -r; dx <= r; dx++)
+                for (int dz = -r; dz <= r; dz++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
+                    if (!_grid.TryGetValue(new Vector2I(cx + dx, cz + dz), out var list)) continue;
+                    foreach (int i in list)
+                    {
+                        if (near >= 0 && Math.Min(Span(near, i), Span(i, near)) <= skip) continue;
+                        float d = new Vector2(Centre[i].X - p.X, Centre[i].Z - p.Z).Length();
+                        if (d < best) best = d;
+                    }
+                }
+            if (best <= r * Cell) return best; // nothing closer can be in a farther ring
+        }
+        return best;
     }
 
     /// Offset from the centre, pulled in on the inside of tight turns so strips never fold over.
-    Vector3 At(int i, float off)
+    public Vector3 At(int i, float off)
     {
+        i = Wrap(i);
         float k = Curv[i];
         if (Mathf.Sign(off) == Mathf.Sign(k) && Mathf.Abs(k) > 1e-5f)
             off = Mathf.Sign(off) * Mathf.Min(Mathf.Abs(off), 0.85f / Mathf.Abs(k));
         return Centre[i] + Left[i] * off;
     }
 
-    void Strip(SurfaceTool st, float offA, float offB, float y, bool[] mask)
+    public void Strip(SurfaceTool st, float offA, float offB, float y, bool[] mask)
     {
         int n = Centre.Length;
         float s = 0;
@@ -78,24 +169,22 @@ public partial class TrackBuilder : Node3D
         }
     }
 
+    /// Kerb with a real profile: flush at the road edge, rising to 5 cm, then dropping at the outer edge.
+    void KerbStrip(SurfaceTool st, float side, bool[] mask)
+    {
+        float h = HalfWidth, w = KerbWidth;
+        Strip(st, side * h, side * (h + w * 0.35f), 0.035f, mask);
+        Strip(st, side * (h + w * 0.35f), side * (h + w), 0.075f, mask);
+    }
+
     /// Concrete wall along an offset; skipped wherever it would cut across another part of the circuit.
-    void Wall(SurfaceTool st, float off)
+    bool[] Wall(SurfaceTool st, float off)
     {
         const float H = 1.1f, T = 0.35f;
         int n = Centre.Length;
         float clear = Mathf.Abs(off) - 0.5f;
         var keep = new bool[n];
-        // ponytail: O(n^2) scan at load (~7M checks); use a grid if tracks get much longer
-        for (int i = 0; i < n; i++)
-        {
-            Vector3 p = At(i, off);
-            keep[i] = true;
-            for (int j = 0; j < n && keep[i]; j++)
-            {
-                int gap = Mathf.Abs(i - j);
-                if (Mathf.Min(gap, n - gap) > 30 && p.DistanceSquaredTo(Centre[j]) < clear * clear) keep[i] = false;
-            }
-        }
+        for (int i = 0; i < n; i++) keep[i] = DistToTrack(At(i, off), i, 30) >= clear;
         float side = Mathf.Sign(off);
         for (int i = 0; i < n; i++)
         {
@@ -103,15 +192,16 @@ public partial class TrackBuilder : Node3D
             if (!keep[i] || !keep[j]) continue;
             Vector3 a = At(i, off), b = At(j, off);
             Vector3 ao = a + Left[i] * side * T, bo = b + Left[j] * side * T;
-            Vector3 h = Vector3.Up * H;
+            Vector3 hh = Vector3.Up * H;
             Vector3 inward = -Left[i] * side;
-            Quad(st, a, b, b + h, a + h, inward);           // face toward the track
-            Quad(st, ao, bo, bo + h, ao + h, -inward);      // back face
-            Quad(st, a + h, b + h, bo + h, ao + h, Vector3.Up);
+            Quad(st, a, b, b + hh, a + hh, inward);
+            Quad(st, ao, bo, bo + hh, ao + hh, -inward);
+            Quad(st, a + hh, b + hh, bo + hh, ao + hh, Vector3.Up);
         }
+        return keep;
     }
 
-    static void Quad(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
+    public static void Quad(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
     {
         foreach (var (p, q, r) in new[] { (a, b, c), (a, c, d) })
         {
@@ -138,7 +228,8 @@ public partial class TrackBuilder : Node3D
         }
     }
 
-    MeshInstance3D Add(string name, Action<SurfaceTool> fill, Material mat, bool collide)
+    /// grip: friction multiplier the car's tyres see; drag: extra rolling drag (N per N of load).
+    public MeshInstance3D Add(string name, Action<SurfaceTool> fill, Material mat, bool collide, float grip = 1f, float drag = 0f)
     {
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
@@ -147,7 +238,13 @@ public partial class TrackBuilder : Node3D
         var mesh = st.Commit();
         var mi = new MeshInstance3D { Name = name, Mesh = mesh, MaterialOverride = mat };
         AddChild(mi);
-        if (collide) mi.CreateTrimeshCollision();
+        if (collide)
+        {
+            mi.CreateTrimeshCollision();
+            var body = mi.GetChild<StaticBody3D>(0);
+            body.SetMeta("grip", grip);
+            body.SetMeta("drag", drag);
+        }
         return mi;
     }
 
@@ -160,18 +257,45 @@ public partial class TrackBuilder : Node3D
             if (Mathf.Abs(Curv[i]) > 1f / KerbRadius)
                 for (int k = -8; k <= 8; k++) kerb[(i + k + n) % n] = true; // run 16 m past the turn
 
-        float h = HalfWidth, r = h + RunoffWidth;
-        Add("Runoff", st => { Strip(st, h, r, 0f, null); Strip(st, -h, -r, 0f, null); }, Materials.Runoff(), true);
+        // gravel on the outside of corners that need heavy braking
+        GravelLeft = new bool[n]; GravelRight = new bool[n];
+        foreach (var c in Corners)
+            if (c.EntrySpeed - c.ApexSpeed > 15f)
+                for (int k = c.Start - 10; k <= c.End + 25; k++)
+                    (c.Dir > 0 ? GravelRight : GravelLeft)[Wrap(k)] = true;
+
+        float h = HalfWidth, r = h + RunoffWidth, g0 = h + KerbWidth + 2.5f;
+        Add("Runoff", st => { Strip(st, h, r, 0f, null); Strip(st, -h, -r, 0f, null); }, Materials.Runoff(), true, 0.95f);
+        Add("Gravel", st => { Strip(st, g0, r, 0.015f, GravelLeft); Strip(st, -g0, -r, 0.015f, GravelRight); }, Materials.Gravel(), true, 0.45f, 0.25f);
         Add("Road", st => Strip(st, -h, h, 0.03f, null), Materials.Asphalt(), true);
-        Add("Lines", st => { Strip(st, h - 0.35f, h - 0.1f, 0.05f, null); Strip(st, -h + 0.1f, -h + 0.35f, 0.05f, null); }, Materials.Paint(), false);
-        Add("Kerbs", st => { Strip(st, h, h + KerbWidth, 0.06f, kerb); Strip(st, -h, -h - KerbWidth, 0.06f, kerb); }, Materials.Kerb(), true);
+        Add("Lines", st => { Strip(st, h - 0.35f, h - 0.1f, 0.045f, null); Strip(st, -h + 0.1f, -h + 0.35f, 0.045f, null); }, Materials.Paint(), false);
+        Add("Kerbs", st => { KerbStrip(st, 1, kerb); KerbStrip(st, -1, kerb); }, Materials.Kerb(), true, 0.9f);
+        Add("Walls", st => { WallLeft = Wall(st, WallOffset); WallRight = Wall(st, -WallOffset); }, Materials.Concrete(), true);
 
-        Add("Walls", st => { Wall(st, r + 1f); Wall(st, -(r + 1f)); }, Materials.Concrete(), true);
+        BuildGround();
+        if (Dress) AddChild(new TrackDressing { Track = this, Name = "Dressing" });
+    }
 
-        var ground = new MeshInstance3D { Name = "Ground", Mesh = new PlaneMesh { Size = new Vector2(8000, 8000) }, MaterialOverride = Materials.Grass() };
-        ground.Position = new Vector3(Bounds().GetCenter().X, -0.1f, Bounds().GetCenter().Z);
+    void BuildGround()
+    {
+        var b = Bounds().Grow(900);
+        float size = Mathf.Max(b.Size.X, b.Size.Z);
+        var origin = new Vector2(b.GetCenter().X - size / 2, b.GetCenter().Z - size / 2);
+        const int R = 256;
+        var img = Image.CreateEmpty(R, R, false, Image.Format.Rf);
+        for (int y = 0; y < R; y++)
+            for (int x = 0; x < R; x++)
+            {
+                var p = new Vector3(origin.X + (x + 0.5f) / R * size, 0, origin.Y + (y + 0.5f) / R * size);
+                img.SetPixel(x, y, new Color(Mathf.Min(DistToTrack(p), 300f) / 300f, 0, 0));
+            }
+        var mat = Materials.Ground(new Rect2(origin, new Vector2(size, size)), ImageTexture.CreateFromImage(img));
+        var ground = new MeshInstance3D { Name = "Ground", Mesh = new PlaneMesh { Size = new Vector2(size, size), SubdivideWidth = 0, SubdivideDepth = 0 }, MaterialOverride = mat };
+        ground.Position = new Vector3(origin.X + size / 2, -0.1f, origin.Y + size / 2);
         AddChild(ground);
         var floor = new StaticBody3D { Name = "GroundCollider", Position = new Vector3(0, -0.1f, 0) };
+        floor.SetMeta("grip", 0.55f);
+        floor.SetMeta("drag", 0.12f);
         floor.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
         AddChild(floor);
     }
@@ -202,7 +326,7 @@ public partial class TrackBuilder : Node3D
     public Transform3D PoseAt(int i, float up = 0.4f, float left = 0)
     {
         int n = Centre.Length;
-        i = ((i % n) + n) % n;
+        i = Wrap(i);
         Vector3 fwd = (Centre[(i + 1) % n] - Centre[(i - 1 + n) % n]).Normalized();
         var basis = Basis.LookingAt(fwd, Vector3.Up);
         return new Transform3D(basis, Centre[i] + Left[i] * left + Vector3.Up * up);

@@ -44,6 +44,7 @@ public sealed class CarSpec
     public float BrakeBias = 0.6f;    // front share
     public float HandbrakeTorque = 3000f;
     public bool Abs = true;
+    public bool TractionControl = true;
 
     // aero (rho = 1.2)
     public float CdA = 0.75f;

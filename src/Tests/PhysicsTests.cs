@@ -139,7 +139,7 @@ public partial class PhysicsTests : Node3D
 
     async Task AiLap()
     {
-        var track = new TrackBuilder();
+        var track = new TrackBuilder { Dress = false };
         AddChild(track);
         _car.Place(track.PoseAt(-6, 0.4f));
         var ai = new AiDriver { Car = _car, Track = track };

@@ -12,7 +12,7 @@ public partial class AiDriver : Node
     public float[] Profile;
     int _index;
 
-    public override void _Ready() => Profile = SpeedProfile(Track, Grip, BrakeDecel);
+    public override void _Ready() => Profile = Track.Profile ?? SpeedProfile(Track, Grip, BrakeDecel);
 
     public static float[] SpeedProfile(TrackBuilder t, float grip, float decel)
     {
@@ -57,6 +57,7 @@ public partial class AiDriver : Node
         if (err < -1.5f) throttle = 0;
         float rearSlip = Mathf.Max(Car.Wheels[2].Kappa, Car.Wheels[3].Kappa);
         if (rearSlip > Car.S.Tyre.KappaPeak) throttle *= 0.5f;
+        throttle = Mathf.Min(throttle, 1f - 0.6f * Mathf.Abs(steer)); // feed power in as the wheel straightens
 
         Car.In = new CarInput { Throttle = throttle, Brake = brake, Steer = steer };
     }

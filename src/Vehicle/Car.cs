@@ -15,6 +15,7 @@ public sealed class Wheel
     public bool Contact;
     public Vector3 ContactPoint, Normal;
     public float Load, Kappa, Alpha, Fx, Fy;
+    public float Grip = 1f, Drag;   // from the surface under the tyre
     public float DriveTorque, BrakeTorque;
 }
 
@@ -27,7 +28,7 @@ public partial class Car : RigidBody3D
     public int Gear = 1;           // -1 reverse, 0 neutral, 1..n
     public float Rpm;
     public bool Ready => Wheels != null;
-    float _shift, _reverseHold;
+    float _shift, _reverseHold, _tc = 1f;
     PhysicsRayQueryParameters3D _ray;
     const float G = 9.81f, Rho = 1.2f;
 
@@ -68,6 +69,12 @@ public partial class Car : RigidBody3D
         if (Gear < 0 && In.Throttle > 0.1f && v > -0.5f) Gear = 1;
 
         float throttle = Gear < 0 ? In.Brake : In.Throttle;
+        if (S.TractionControl)
+        {
+            float slip = Mathf.Max(Wheels[2].Kappa, Wheels[3].Kappa);
+            _tc = slip > 1.05f * S.Tyre.KappaPeak ? Mathf.Max(0.05f, _tc - dt * 10f) : Mathf.Min(1f, _tc + dt * 2.5f);
+            throttle *= _tc;
+        }
         float wheelOmega = 0.5f * (Wheels[2].Omega + Wheels[3].Omega);
         float wheelRpm = Mathf.Abs(wheelOmega * Ratio) * 60f / Mathf.Tau;
         Rpm = Mathf.Max(S.IdleRpm, wheelRpm);
@@ -119,6 +126,12 @@ public partial class Car : RigidBody3D
             if (w.Contact)
             {
                 w.ContactPoint = (Vector3)hit["position"];
+                w.Grip = 1f; w.Drag = 0f;
+                if (hit["collider"].AsGodotObject() is Node c && c.HasMeta("grip"))
+                {
+                    w.Grip = (float)c.GetMeta("grip");
+                    w.Drag = (float)c.GetMeta("drag", 0f);
+                }
                 w.Normal = (Vector3)hit["normal"];
                 float d = from.DistanceTo(w.ContactPoint);
                 w.SuspLength = d - S.WheelRadius;
@@ -160,8 +173,8 @@ public partial class Car : RigidBody3D
             float vk = Mathf.Max(Mathf.Abs(vx), 3f);
             // implicit (linearised backward Euler) wheel spin: stable at any speed
             float k0 = (w.Omega * r - vx) / vk;
-            float fx0 = S.Tyre.Force(k0, w.Alpha, w.Load).X;
-            float dFdk = (S.Tyre.Force(k0 + 1e-3f, w.Alpha, w.Load).X - fx0) / 1e-3f;
+            float fx0 = w.Grip * S.Tyre.Force(k0, w.Alpha, w.Load).X;
+            float dFdk = (w.Grip * S.Tyre.Force(k0 + 1e-3f, w.Alpha, w.Load).X - fx0) / 1e-3f;
             float iEff = S.WheelInertia + dt * r * Mathf.Max(0, dFdk) * r / vk;
             float omega = w.Omega + dt * (w.DriveTorque - r * fx0) / iEff;
             float brakeStep = dt * w.BrakeTorque / iEff;
@@ -170,13 +183,13 @@ public partial class Car : RigidBody3D
             w.SpinAngle += omega * dt;
             w.Kappa = (omega * r - vx) / vk;
 
-            var f = S.Tyre.Force(w.Kappa, w.Alpha, w.Load);
+            var f = S.Tyre.Force(w.Kappa, w.Alpha, w.Load) * w.Grip;
             float m = w.Load / G; // share of mass this corner carries
             float slipVel = omega * r - vx;
             // never push past zero relative velocity in one step (keeps the car still at rest)
             f.X = Mathf.Clamp(f.X, -0.5f * m * Mathf.Abs(slipVel) / dt - 1f, 0.5f * m * Mathf.Abs(slipVel) / dt + 1f);
             f.Y = Mathf.Clamp(f.Y, -0.5f * m * Mathf.Abs(vy) / dt, 0.5f * m * Mathf.Abs(vy) / dt);
-            f.X -= S.RollingResistance * w.Load * Mathf.Clamp(vx, -1, 1);
+            f.X -= (S.RollingResistance + w.Drag) * w.Load * Mathf.Clamp(vx, -1, 1);
             w.Fx = f.X; w.Fy = f.Y;
 
             st.ApplyForce(n * susp + lng * f.X + lat * f.Y, w.ContactPoint - xf.Origin);

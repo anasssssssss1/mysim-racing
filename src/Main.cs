@@ -56,10 +56,18 @@ public partial class Main : Node3D
             _car.Place(_track.PoseAt(_track.Nearest(_car.GlobalPosition, 0, 0)));
     }
 
+    const string SkyPhoto = "res://assets/cc0/sky/kloofendal_48d_partly_cloudy_puresky_4k.hdr";
+
     static Environment Env() => new()
     {
         BackgroundMode = Environment.BGMode.Sky,
-        Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial { SkyTopColor = new Color(0.22f, 0.42f, 0.75f), SkyHorizonColor = new Color(0.72f, 0.78f, 0.85f), GroundHorizonColor = new Color(0.6f, 0.58f, 0.52f) } },
+        Sky = new Sky
+        {
+            SkyMaterial = ResourceLoader.Exists(SkyPhoto)
+                ? new PanoramaSkyMaterial { Panorama = GD.Load<Texture2D>(SkyPhoto), EnergyMultiplier = 1f }
+                : new ProceduralSkyMaterial { SkyTopColor = new Color(0.22f, 0.42f, 0.75f), SkyHorizonColor = new Color(0.72f, 0.78f, 0.85f), GroundHorizonColor = new Color(0.6f, 0.58f, 0.52f) },
+            ProcessMode = Sky.ProcessModeEnum.Quality,
+        },
         AmbientLightSource = Environment.AmbientSource.Sky,
         ReflectedLightSource = Environment.ReflectionSource.Sky,
         TonemapMode = Environment.ToneMapper.Filmic,
@@ -77,6 +85,7 @@ public partial class Main : Node3D
         AddChild(cam);
         await ToSignal(GetTree().CreateTimer(4), Timer.SignalName.Timeout); // car settles, textures build
         int n = _track.Centre.Length, hair = _track.TightestCorner();
+        var slow = _track.Corners.OrderBy(c => c.ApexSpeed).First();
         var b = _track.Bounds();
         float size = Mathf.Max(b.Size.X, b.Size.Z);
         var shots = new (string, Camera3D, Vector3, Vector3)[]
@@ -86,6 +95,10 @@ public partial class Main : Node3D
             ("3_car_front", cam, _car.GlobalTransform * new Vector3(2.8f, 0.6f, -5.5f), _car.GlobalPosition + Vector3.Up * 0.2f),
             ("4_hairpin", cam, P(hair - 70, _track.Curv[hair] > 0 ? -14 : 14, 9), P(hair, 0, 0)),
             ("5_low_corner", cam, P(hair - 25, 0, 1.1f), P(hair, 0, 1f)),
+            ("6_main_straight", cam, P(-160, 0, 1.6f), P(-40, 0, 3f)),
+            ("7_grid_and_gantry", cam, P(-70, 4, 6f), P(0, 0, 4f)),
+            ("8_corner_outside", cam, P(slow.Apex - 30, slow.Dir * (_track.HalfWidth - 1), 1.8f), P(slow.Apex, -slow.Dir * _track.WallOffset, 2f)),
+            ("9_aerial_low", cam, P(-60, 0, 0) + new Vector3(160, 120, 160), P(-60, 0, 0)),
         };
         foreach (var (name, c, pos, at) in shots)
         {
