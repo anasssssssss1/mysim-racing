@@ -8,8 +8,9 @@ using System.Linq;
 public partial class Main : Node3D
 {
     TrackBuilder _track;
-    Car _car;
     ChaseCamera _cam;
+    Race _race;
+    Car _car => _race?.Local;
 
     public override async void _Ready()
     {
@@ -26,28 +27,29 @@ public partial class Main : Node3D
             DirectionalShadowMaxDistance = 400,
         });
 
-        _track = new TrackBuilder();
+        _track = new TrackBuilder { Name = "Track" };
         AddChild(_track);
-        _car = new Car();
-        AddChild(_car);
-        _car.Place(_track.PoseAt(0, 0.4f, -2f));
-        CarVisual.For(_car);
-        _cam = new ChaseCamera { Target = _car };
+        _cam = new ChaseCamera();
         AddChild(_cam);
-        var laps = new LapTimer { Car = _car, Track = _track };
-        AddChild(laps);
+        var hud = new Hud();
+        AddChild(hud);
+        _race = new Race { Name = "Race", Track = _track, Cam = _cam, Hud = hud };
+        AddChild(_race);
 
         var shotArg = args.FirstOrDefault(a => a.StartsWith("--shots="));
-        if (shotArg != null) { await Shots(shotArg["--shots=".Length..]); return; }
+        if (shotArg != null) { hud.Visible = false; _race.StartPractice(); await Shots(shotArg["--shots=".Length..]); return; }
 
-        AddChild(new PlayerController { Car = _car });
-        AddChild(new Hud { Car = _car, Laps = laps });
-        _cam.Snap();
+        var net = new NetSession { Name = "Net" };
+        AddChild(net);
+        AddChild(new Menu { Net = net, Race = _race });
+        var b = _track.Bounds();
+        _cam.Position = b.GetCenter() + new Vector3(0, 900, 700);
+        _cam.LookAt(b.GetCenter(), Vector3.Up);
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_car == null || _track == null) return;
+        if (_car == null || _car.Freeze) return;
         bool fell = _car.GlobalPosition.Y < -20;
         if (fell || Input.IsActionJustPressed("reset"))
             _car.Place(_track.PoseAt(_track.Nearest(_car.GlobalPosition, 0, 0)));

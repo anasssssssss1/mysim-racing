@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 /// Lap timing by progress along the centreline: a lap counts when the car crosses the start
 /// having passed the halfway point, so cutting back across the line does not count.
@@ -8,8 +9,15 @@ public partial class LapTimer : Node
     public TrackBuilder Track;
     public int Lap = 1;
     public float Current, Best = -1;
+    public event Action<int, float> LapDone;
     int _index;
     bool _half;
+
+    public void Reset()
+    {
+        Lap = 1; Current = 0; _half = false;
+        _index = Track.Nearest(Car.GlobalPosition, 0, 0);
+    }
 
     public override void _PhysicsProcess(double delta)
     {
@@ -21,6 +29,7 @@ public partial class LapTimer : Node
         if (_half && _index > n - 50 && i < 50)
         {
             if (Best < 0 || Current < Best) Best = Current;
+            LapDone?.Invoke(Lap, Current);
             Current = 0; Lap++; _half = false;
         }
         _index = i;

@@ -15,9 +15,12 @@ public partial class PhysicsTests : Node3D
     public override async void _Ready()
     {
         var ground = new StaticBody3D();
-        ground.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(6000, 2, 6000) }, Position = new Vector3(0, -1, 0) });
+        ground.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() }); // endless flat ground
         AddChild(ground);
 
+        _report.Add("== join codes");
+        foreach (var ip in new[] { "0.0.0.0", "192.168.1.20", "255.255.255.255", "83.110.7.9" })
+            Check(NetSession.Decode(NetSession.Encode(ip)) == ip, $"{ip} -> {NetSession.Encode(ip)} -> back");
         await Run("at rest", AtRest);
         await Run("0-100 km/h and top speed", Accel);
         await Run("100-0 km/h braking", Braking);

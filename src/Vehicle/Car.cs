@@ -28,6 +28,7 @@ public partial class Car : RigidBody3D
     public float Rpm;
     public bool Ready => Wheels != null;
     float _shift, _reverseHold;
+    PhysicsRayQueryParameters3D _ray;
     const float G = 9.81f, Rho = 1.2f;
 
     public float ForwardSpeed => LinearVelocity.Dot(-GlobalBasis.Z);
@@ -110,9 +111,9 @@ public partial class Car : RigidBody3D
         foreach (var w in Wheels)
         {
             Vector3 from = xf * w.Mount, to = from - up * (S.RestLength + S.WheelRadius);
-            var q = PhysicsRayQueryParameters3D.Create(from, to);
-            q.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
-            var hit = space.IntersectRay(q);
+            _ray ??= new PhysicsRayQueryParameters3D { Exclude = new Godot.Collections.Array<Rid> { GetRid() } };
+            _ray.From = from; _ray.To = to;
+            using var hit = space.IntersectRay(_ray);
             w.PrevCompression = w.Compression;
             w.Contact = hit.Count > 0;
             if (w.Contact)
@@ -178,7 +179,7 @@ public partial class Car : RigidBody3D
             f.X -= S.RollingResistance * w.Load * Mathf.Clamp(vx, -1, 1);
             w.Fx = f.X; w.Fy = f.Y;
 
-            st.ApplyForce(up * susp + lng * f.X + lat * f.Y, w.ContactPoint - xf.Origin);
+            st.ApplyForce(n * susp + lng * f.X + lat * f.Y, w.ContactPoint - xf.Origin);
         }
 
         // limited-slip differential: move the two driven wheels toward each other's speed, capped
