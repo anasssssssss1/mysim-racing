@@ -22,7 +22,18 @@ public static class Materials
         };
     }
 
-    public static Material Asphalt() => Surface(new Color(0.085f, 0.087f, 0.09f), new Color(0.17f, 0.17f, 0.175f), 0.88f, 0.08f, 0.12f, 6f, 11);
+    public static Material Asphalt()
+    {
+        var fine = new FastNoiseLite { Seed = 11, Frequency = 0.25f, FractalOctaves = 3 };
+        var big = new FastNoiseLite { Seed = 21, Frequency = 0.01f, FractalOctaves = 4 };
+        var m = new ShaderMaterial { Shader = GD.Load<Shader>("res://src/Track/asphalt.gdshader") };
+        m.SetShaderParameter("detail", new NoiseTexture2D { Noise = fine, Width = 512, Height = 512, Seamless = true });
+        m.SetShaderParameter("detail_n", new NoiseTexture2D { Noise = fine, Width = 512, Height = 512, Seamless = true, AsNormalMap = true, BumpStrength = 2f });
+        m.SetShaderParameter("macro", new NoiseTexture2D { Noise = big, Width = 512, Height = 512, Seamless = true });
+        return m;
+    }
+
+    public static Material Concrete() => Surface(new Color(0.55f, 0.55f, 0.53f), new Color(0.72f, 0.72f, 0.7f), 0.85f, 0.05f, 0.25f, 2f, 14);
     public static Material Runoff() => Surface(new Color(0.16f, 0.17f, 0.18f), new Color(0.27f, 0.28f, 0.29f), 0.92f, 0.06f, 0.08f, 3f, 12);
     public static Material Grass() => Surface(new Color(0.16f, 0.25f, 0.08f), new Color(0.32f, 0.42f, 0.16f), 0.95f, 0.02f, 0.02f, 4f, 13);
     public static Material Paint() => new StandardMaterial3D { AlbedoColor = new Color(0.92f, 0.92f, 0.9f), Roughness = 0.6f };

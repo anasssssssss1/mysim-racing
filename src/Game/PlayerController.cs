@@ -14,14 +14,14 @@ public partial class PlayerController : Node
             InputMap.AddAction(name, 0.1f);
             foreach (var e in events) InputMap.ActionAddEvent(name, e);
         }
-        InputEventKey Key(Key k) => new() { PhysicalKeycode = k };
-        Act("throttle", Key(Key.W), Key(Key.Up), new InputEventJoypadMotion { Axis = JoyAxis.TriggerRight, AxisValue = 1 });
-        Act("brake", Key(Key.S), Key(Key.Down), new InputEventJoypadMotion { Axis = JoyAxis.TriggerLeft, AxisValue = 1 });
-        Act("steer_left", Key(Key.A), Key(Key.Left), new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = -1 });
-        Act("steer_right", Key(Key.D), Key(Key.Right), new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = 1 });
-        Act("handbrake", Key(Key.Space), new InputEventJoypadButton { ButtonIndex = JoyButton.A });
-        Act("reset", Key(Key.R), new InputEventJoypadButton { ButtonIndex = JoyButton.Y });
-        Act("camera", Key(Key.C), new InputEventJoypadButton { ButtonIndex = JoyButton.RightShoulder });
+        InputEventKey K(Key k) => new() { PhysicalKeycode = k };
+        Act("throttle", K(Key.W), K(Key.Up), new InputEventJoypadMotion { Axis = JoyAxis.TriggerRight, AxisValue = 1 });
+        Act("brake", K(Key.S), K(Key.Down), new InputEventJoypadMotion { Axis = JoyAxis.TriggerLeft, AxisValue = 1 });
+        Act("steer_left", K(Key.A), K(Key.Left), new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = -1 });
+        Act("steer_right", K(Key.D), K(Key.Right), new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = 1 });
+        Act("handbrake", K(Key.Space), new InputEventJoypadButton { ButtonIndex = JoyButton.A });
+        Act("reset", K(Key.R), new InputEventJoypadButton { ButtonIndex = JoyButton.Y });
+        Act("camera", K(Key.C), new InputEventJoypadButton { ButtonIndex = JoyButton.RightShoulder });
     }
 
     public override void _PhysicsProcess(double delta)

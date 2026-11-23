@@ -78,6 +78,54 @@ public partial class TrackBuilder : Node3D
         }
     }
 
+    /// Concrete wall along an offset; skipped wherever it would cut across another part of the circuit.
+    void Wall(SurfaceTool st, float off)
+    {
+        const float H = 1.1f, T = 0.35f;
+        int n = Centre.Length;
+        float clear = Mathf.Abs(off) - 0.5f;
+        var keep = new bool[n];
+        // ponytail: O(n^2) scan at load (~7M checks); use a grid if tracks get much longer
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 p = At(i, off);
+            keep[i] = true;
+            for (int j = 0; j < n && keep[i]; j++)
+            {
+                int gap = Mathf.Abs(i - j);
+                if (Mathf.Min(gap, n - gap) > 30 && p.DistanceSquaredTo(Centre[j]) < clear * clear) keep[i] = false;
+            }
+        }
+        float side = Mathf.Sign(off);
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            if (!keep[i] || !keep[j]) continue;
+            Vector3 a = At(i, off), b = At(j, off);
+            Vector3 ao = a + Left[i] * side * T, bo = b + Left[j] * side * T;
+            Vector3 h = Vector3.Up * H;
+            Vector3 inward = -Left[i] * side;
+            Quad(st, a, b, b + h, a + h, inward);           // face toward the track
+            Quad(st, ao, bo, bo + h, ao + h, -inward);      // back face
+            Quad(st, a + h, b + h, bo + h, ao + h, Vector3.Up);
+        }
+    }
+
+    static void Quad(SurfaceTool st, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
+    {
+        foreach (var (p, q, r) in new[] { (a, b, c), (a, c, d) })
+        {
+            // clockwise when seen from the side the normal points to
+            var (x, y, z) = (q - p).Cross(r - p).Dot(normal) > 0 ? (p, r, q) : (p, q, r);
+            foreach (var v in new[] { x, y, z })
+            {
+                st.SetNormal(normal);
+                st.SetUV(new Vector2(v.X + v.Z, v.Y));
+                st.AddVertex(v);
+            }
+        }
+    }
+
     static void Tri(SurfaceTool st, Vector3 a, Vector2 ua, Vector3 b, Vector2 ub, Vector3 c, Vector2 uc)
     {
         // Godot front faces are clockwise seen from the front; order so the face points +Y
@@ -117,6 +165,8 @@ public partial class TrackBuilder : Node3D
         Add("Road", st => Strip(st, -h, h, 0.03f, null), Materials.Asphalt(), true);
         Add("Lines", st => { Strip(st, h - 0.35f, h - 0.1f, 0.05f, null); Strip(st, -h + 0.1f, -h + 0.35f, 0.05f, null); }, Materials.Paint(), false);
         Add("Kerbs", st => { Strip(st, h, h + KerbWidth, 0.06f, kerb); Strip(st, -h, -h - KerbWidth, 0.06f, kerb); }, Materials.Kerb(), true);
+
+        Add("Walls", st => { Wall(st, r + 1f); Wall(st, -(r + 1f)); }, Materials.Concrete(), true);
 
         var ground = new MeshInstance3D { Name = "Ground", Mesh = new PlaneMesh { Size = new Vector2(8000, 8000) }, MaterialOverride = Materials.Grass() };
         ground.Position = new Vector3(Bounds().GetCenter().X, -0.1f, Bounds().GetCenter().Z);
