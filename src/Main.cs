@@ -42,6 +42,7 @@ public partial class Main : Node3D
         var net = new NetSession { Name = "Net" };
         AddChild(net);
         AddChild(new Menu { Net = net, Race = _race });
+        AddChild(new TouchControls());
         var b = _track.Bounds();
         _cam.Position = b.GetCenter() + new Vector3(0, 900, 700);
         _cam.LookAt(b.GetCenter(), Vector3.Up);

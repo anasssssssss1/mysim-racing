@@ -156,10 +156,14 @@ public partial class PhysicsTests : Node3D
             {
                 hint = track.Nearest(_car.GlobalPosition, hint, 40);
                 float off = (_car.GlobalPosition - track.Centre[hint]).Dot(track.Left[hint]);
+                if (Mathf.Abs(off) > worstOff && Mathf.Abs(off) > track.HalfWidth + 1.2f && worstOff <= track.HalfWidth + 1.2f)
+                    _report.Add($"  first off-track at idx {hint}/{track.Centre.Length}: v {Speed * 3.6f:F0} km/h, plan {ai.Profile[hint] * 3.6f:F0}, curv {track.Curv[hint]:F4}, steer {_car.In.Steer:F2}, off {off:F1}");
                 worstOff = Mathf.Max(worstOff, Mathf.Abs(off));
                 vmax = Mathf.Max(vmax, _car.ForwardSpeed);
+                if (_steps % 480 == 0) _report.Add($"  t {_steps / 240} s idx {hint} v {Speed * 3.6f:F0} plan {ai.Profile[hint] * 3.6f:F0} off {off:F1} steer {_car.In.Steer:F2} thr {_car.In.Throttle:F2} brk {_car.In.Brake:F2}");
             });
         ai.QueueFree(); timer.QueueFree(); track.QueueFree();
+        for (int i = 0; i < track.Centre.Length; i += 50) _report.Add($"  plan idx {i}: {ai.Profile[i] * 3.6f:F0} km/h, curv {track.Curv[i]:F4}");
         Check(lap > 0, $"completed a lap: {LapTimer.Fmt(lap)} (top speed {vmax * 3.6f:F0} km/h)");
         Check(lap > 105 && lap < 160, "lap time in 1:45-2:40");
         Check(worstOff < track.HalfWidth + 1.2f, $"stayed on the road + kerbs: worst offset {worstOff:F1} m (< {track.HalfWidth + 1.2f:F1})");
