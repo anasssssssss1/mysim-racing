@@ -72,9 +72,9 @@ public static class Materials
     public static Material PitLane() => Road("asphalt_pit_lane", 0f);
     public static Material Runoff() => Scanned("concrete_floor_worn_001", 4f, new Color(0.75f, 0.75f, 0.78f),
         Procedural(new Color(0.16f, 0.17f, 0.18f), new Color(0.27f, 0.28f, 0.29f), 0.92f, 0.06f, 0.08f, 3f, 12));
-    public static Material Gravel() => Scanned("coral_gravel", 2.5f, Colors.White,
+    public static Material Gravel() => Scanned("coral_gravel", 2.5f, new Color(0.95f, 0.88f, 0.76f),
         Procedural(new Color(0.55f, 0.5f, 0.42f), new Color(0.75f, 0.7f, 0.6f), 0.95f, 0.3f, 0.3f, 6f, 15));
-    public static Material Concrete() => Scanned("painted_concrete", 3f, Colors.White,
+    public static Material Concrete() => Scanned("brushed_concrete", 3f, new Color(0.95f, 0.95f, 0.95f),
         Procedural(new Color(0.55f, 0.55f, 0.53f), new Color(0.72f, 0.72f, 0.7f), 0.85f, 0.05f, 0.25f, 2f, 14));
     public static Material Building() => Scanned("brushed_concrete", 4f, new Color(0.92f, 0.92f, 0.95f),
         Procedural(new Color(0.7f, 0.7f, 0.72f), new Color(0.85f, 0.85f, 0.86f), 0.7f, 0.05f, 0.1f, 1f, 16));

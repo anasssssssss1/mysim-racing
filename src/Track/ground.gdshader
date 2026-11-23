@@ -27,9 +27,11 @@ void fragment() {
 	vec3 grass, sand;
 	vec3 gn, sn;
 	if (use_tex) {
-		vec2 p = wpos.xz / 3.0, s = wpos.xz / 6.0;
+		vec2 p = wpos.xz / 3.0, s = wpos.xz / 11.0;
+		vec2 s2 = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * wpos.xz / 37.0;
 		grass = texture(grass_tex, p).rgb * mix(0.8, 1.15, var);
-		sand = texture(sand_tex, s).rgb * mix(0.9, 1.08, var);
+		// warm desert tint; two scales blended so the scan never visibly repeats
+		sand = mix(texture(sand_tex, s).rgb, texture(sand_tex, s2).rgb, 0.5) * vec3(1.08, 0.95, 0.78) * mix(0.88, 1.1, var);
 		gn = texture(grass_n, p).rgb;
 		sn = texture(sand_n, s).rgb;
 	} else {

@@ -422,7 +422,7 @@ public partial class TrackDressing : Node3D
     void City()
     {
         var b = Track.Bounds().Grow(650);
-        Color[] facades = { new(0.85f, 0.83f, 0.78f), new(0.75f, 0.76f, 0.78f), new(0.62f, 0.64f, 0.68f), new(0.9f, 0.88f, 0.84f), new(0.55f, 0.5f, 0.45f) };
+        Color[] facades = { new(0.85f, 0.8f, 0.7f), new(0.75f, 0.76f, 0.78f), new(0.42f, 0.45f, 0.5f), new(0.92f, 0.9f, 0.86f), new(0.6f, 0.52f, 0.42f), new(0.2f, 0.25f, 0.3f), new(0.78f, 0.7f, 0.6f) };
         for (int tries = 0; tries < 4000 && _city.Count < 420; tries++)
         {
             var p = new Vector3(_rng.RandfRange(b.Position.X, b.End.X), 0, _rng.RandfRange(b.Position.Z, b.End.Z));
@@ -431,7 +431,9 @@ public partial class TrackDressing : Node3D
             float w = _rng.RandfRange(18, 55), dpt = _rng.RandfRange(18, 55);
             float h = _rng.RandfRange(8, 30) + (d > 250 ? _rng.RandfRange(0, 1) * _rng.RandfRange(0, 110) : 0);
             var basis = new Basis(Vector3.Up, _rng.RandfRange(0, Mathf.Tau)) * Basis.FromScale(new Vector3(w, h, dpt));
-            _city.Add((new Transform3D(basis, p + Vector3.Up * h / 2), facades[_rng.RandiRange(0, facades.Length - 1)]));
+            var col = facades[_rng.RandiRange(0, facades.Length - 1)];
+            col.A = h > 45 ? _rng.RandfRange(0.34f, 1f) : _rng.RandfRange(0f, 1f); // towers lean to glass
+            _city.Add((new Transform3D(basis, p + Vector3.Up * h / 2), col));
             Take(p, Mathf.Max(w, dpt) * 0.6f);
         }
     }

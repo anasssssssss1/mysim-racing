@@ -4,11 +4,13 @@ shader_type spatial;
 varying vec3 wpos;
 varying vec3 wnorm;
 varying vec3 col;
+varying float style;
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wnorm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	col = COLOR.rgb;
+	style = COLOR.a;
 }
 
 void fragment() {
@@ -16,7 +18,12 @@ void fragment() {
 	float along = abs(wnorm.x) > 0.5 ? wpos.z : wpos.x;
 	float fx = fract(along / 2.8);
 	float fy = fract(wpos.y / 3.5);
-	float win = wall && wpos.y > 1.0 ? step(0.16, fx) * step(fx, 0.84) * step(0.22, fy) * step(fy, 0.86) : 0.0;
+	// style from instance alpha: punched windows / glass curtain wall / horizontal ribbon windows
+	float win;
+	if (style < 0.34) win = step(0.16, fx) * step(fx, 0.84) * step(0.22, fy) * step(fy, 0.86);
+	else if (style < 0.67) win = step(0.04, fx) * step(fx, 0.96) * step(0.06, fy) * step(fy, 0.94);
+	else win = step(0.3, fy) * step(fy, 0.8);
+	win = wall && wpos.y > 1.0 ? win : 0.0;
 	float lit = step(0.7, fract(sin(dot(floor(vec2(along / 2.8, wpos.y / 3.5)), vec2(12.9898, 78.233))) * 43758.5453));
 	vec3 glass = mix(vec3(0.06, 0.09, 0.12), vec3(0.16, 0.2, 0.24), lit);
 	ALBEDO = mix(col, glass, win);

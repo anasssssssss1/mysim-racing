@@ -62,7 +62,7 @@ public partial class Race : Node3D
         _cars.AddChild(car);
         car.SetMultiplayerAuthority((int)id);
         car.Place(Track.PoseAt(-(6 + 5 * slot), 0.4f, slot % 2 == 0 ? 3f : -3f));
-        CarVisual.For(car);
+        CarVisual.For(car, slot);
         EngineAudio.For(car);
         car.AddChild(new NetCarSync { Name = "Sync" });
         if (!local) { car.FreezeMode = RigidBody3D.FreezeModeEnum.Kinematic; car.Freeze = true; return; }

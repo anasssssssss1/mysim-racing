@@ -4,7 +4,7 @@ runs:
   using: composite
   steps:
     - uses: actions/setup-dotnet@v4
-      with: { dotnet-version: 8.0.x }
+      with: { dotnet-version: 9.0.x }
     - shell: bash
       run: |
         curl -sSfL -o g.zip https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_mono_linux_x86_64.zip

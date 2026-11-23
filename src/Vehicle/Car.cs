@@ -27,7 +27,7 @@ public partial class Car : RigidBody3D
     public Wheel[] Wheels;
     public int Gear = 1;           // -1 reverse, 0 neutral, 1..n
     public float Rpm;
-    public bool Ready => Wheels != null;
+    public new bool Ready => Wheels != null;
     float _shift, _reverseHold, _tc = 1f;
     PhysicsRayQueryParameters3D _ray;
     const float G = 9.81f, Rho = 1.2f;
@@ -71,8 +71,14 @@ public partial class Car : RigidBody3D
         float throttle = Gear < 0 ? In.Brake : In.Throttle;
         if (S.TractionControl)
         {
-            float slip = Mathf.Max(Wheels[2].Kappa, Wheels[3].Kappa);
-            _tc = slip > 1.05f * S.Tyre.KappaPeak ? Mathf.Max(0.05f, _tc - dt * 10f) : Mathf.Min(1f, _tc + dt * 2.5f);
+            // combined slip of the driven wheels: 1.0 = at the tyre's peak (wheelspin and sideways slip together)
+            float slip = 0;
+            for (int k = 2; k < 4; k++)
+            {
+                float sx = Mathf.Max(0, Wheels[k].Kappa) / S.Tyre.KappaPeak, sy = Wheels[k].Alpha / S.Tyre.AlphaPeak;
+                slip = Mathf.Max(slip, Mathf.Sqrt(sx * sx + sy * sy));
+            }
+            _tc = slip > 0.95f ? Mathf.Max(0.05f, _tc - dt * 12f) : Mathf.Min(1f, _tc + dt * 2.5f);
             throttle *= _tc;
         }
         float wheelOmega = 0.5f * (Wheels[2].Omega + Wheels[3].Omega);
