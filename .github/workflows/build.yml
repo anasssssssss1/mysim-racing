@@ -1,0 +1,54 @@
+name: build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  GODOT: 4.7.2
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Physics tests
+        run: $G --headless --path . --fixed-fps 240 -- --test
+
+  shots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Software Vulkan
+        run: for i in 1 2 3; do sudo apt-get update -q && sudo apt-get install -yq xvfb mesa-vulkan-drivers libvulkan1 && break; sleep 20; done
+      - name: Render shots
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" $G --path . --rendering-driver vulkan --resolution 1920x1080 -- --shots=$PWD/shots
+      - uses: actions/upload-artifact@v4
+        with: { name: shots, path: shots/ }
+
+  windows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - uses: actions/cache@v4
+        id: tpl
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-templates-${{ env.GODOT }}-mono
+      - name: Export templates
+        if: steps.tpl.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o t.tpz https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_mono_export_templates.tpz
+          d=~/.local/share/godot/export_templates/${GODOT}.stable.mono; mkdir -p $d
+          unzip -q t.tpz && mv templates/* $d/ && rm -rf t.tpz templates
+      - name: Export Windows
+        run: mkdir -p build/windows && $G --headless --path . --export-release "Windows" build/windows/MySimRacing.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: MySimRacing-windows, path: build/windows/ }

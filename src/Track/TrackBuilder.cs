@@ -121,6 +121,9 @@ public partial class TrackBuilder : Node3D
         var ground = new MeshInstance3D { Name = "Ground", Mesh = new PlaneMesh { Size = new Vector2(8000, 8000) }, MaterialOverride = Materials.Grass() };
         ground.Position = new Vector3(Bounds().GetCenter().X, -0.1f, Bounds().GetCenter().Z);
         AddChild(ground);
+        var floor = new StaticBody3D { Name = "GroundCollider", Position = new Vector3(0, -0.1f, 0) };
+        floor.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D() });
+        AddChild(floor);
     }
 
     public Aabb Bounds()
@@ -128,6 +131,31 @@ public partial class TrackBuilder : Node3D
         var b = new Aabb(Centre[0], Vector3.Zero);
         foreach (var p in Centre) b = b.Expand(p);
         return b;
+    }
+
+    /// Nearest centreline index, searching ±window around a hint (full search when window <= 0 or far off).
+    public int Nearest(Vector3 p, int hint, int window)
+    {
+        int n = Centre.Length, best = hint;
+        float bd = float.MaxValue;
+        int from = window > 0 ? hint - window : 0, to = window > 0 ? hint + window : n - 1;
+        for (int k = from; k <= to; k++)
+        {
+            int i = ((k % n) + n) % n;
+            float d = Centre[i].DistanceSquaredTo(p);
+            if (d < bd) { bd = d; best = i; }
+        }
+        return window > 0 && bd > 900 ? Nearest(p, 0, 0) : best;
+    }
+
+    /// Pose on the centreline at index i, facing the race direction, lifted by `up`.
+    public Transform3D PoseAt(int i, float up = 0.4f, float left = 0)
+    {
+        int n = Centre.Length;
+        i = ((i % n) + n) % n;
+        Vector3 fwd = (Centre[(i + 1) % n] - Centre[(i - 1 + n) % n]).Normalized();
+        var basis = Basis.LookingAt(fwd, Vector3.Up);
+        return new Transform3D(basis, Centre[i] + Left[i] * left + Vector3.Up * up);
     }
 
     public int TightestCorner()
